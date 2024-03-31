@@ -5,6 +5,9 @@ Custom component for getting information about your Fisker Ocean presented in Ho
 
 # Features
 - Provides sensors for various part of the vehicle
+![sensors](https://github.com/sripraneeth/home-assistant-MyFisker/sensors.png)
+![app-info](https://github.com/sripraneeth/home-assistant-MyFisker/ap-info.jpeg)
+
 # Installation and setup
 This integration can be installed through HACS.
 
@@ -97,3 +100,6 @@ series:
 - Battery range sometimes reported as 0 (zero) from the Fisker API
 - Battery / range is reported without decimals, making trip stats unprecise at shorter trips
 
+
+#Credits
+[MichealOE]  https://github.com/MichaelOE/home-assistant-MyFisker

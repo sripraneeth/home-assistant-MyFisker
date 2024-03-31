@@ -2,13 +2,13 @@
   "domain": "my_fisker",
   "name": "My Fisker",
   "codeowners": [
-    "@MichaelOE"
+    "@sripraneeth"
   ],
-  "version": "0.1.4",
+  "version": "0.1.5",
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/MichaelOE/home-assistant-MyFisker",
-  "issue_tracker": "https://github.com/MichaelOE/home-assistant-MyFisker/issues",
+  "documentation": "https://github.com/sripraneeth/home-assistant-MyFisker",
+  "issue_tracker": "https://github.com/sripraneeth/home-assistant-MyFisker/issues",
   "homekit": {},
   "iot_class": "cloud_polling",
   "requirements": [],

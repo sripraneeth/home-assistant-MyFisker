@@ -72,6 +72,16 @@ class MyFiskerAPI:
             _LOGGER.warning("Self.data['car_settings'] is not available")
             return None
 
+    def GetExtremeTrimSettings(self):
+        try:
+            data = json.loads(self.data[TRIM_EXTREME_ULTRA_BATT_CAPACITY])
+            _LOGGER.debug(data)
+            return data
+        except NameError:
+            _LOGGER.warning("Self.data['TRIM_EXTREME_ULTRA_BATT_CAPACITY'] is not available")
+            return None
+
+
     async def GetDigitalTwin(self):
         self.data[DIGITAL_TWIN] = self.flatten_json(
             self.ParseDigitalTwinResponse(
