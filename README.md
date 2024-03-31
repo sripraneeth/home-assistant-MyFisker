@@ -11,7 +11,6 @@ Custom component for getting information about your Fisker Ocean presented in Ho
 # Installation and setup
 This integration can be installed through HACS.
 
-Alternatively, you can get the custom repository here: https://github.com/MichaelOE/home-assistant-MyFisker
 
 ## Setup
 - Username: The same as you use in your 'My Fisker'
@@ -101,6 +100,3 @@ series:
 - Battery range sometimes reported as 0 (zero) from the Fisker API
 - Battery / range is reported without decimals, making trip stats unprecise at shorter trips
 
-
-[buymecoffeebadge]: https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png
-[michaelo-buymecoffee]: https://www.buymeacoffee.com/michaelo
