@@ -5,8 +5,8 @@ Custom component for getting information about your Fisker Ocean presented in Ho
 
 # Features
 - Provides sensors for various part of the vehicle
-![sensors](https://github.com/sripraneeth/home-assistant-MyFisker/sensors.png)
-![app-info](https://github.com/sripraneeth/home-assistant-MyFisker/ap-info.jpeg)
+![sensors](https://github.com/sripraneeth/home-assistant-MyFisker/blob/main/sensors.png?raw=true)
+![app-info](https://github.com/sripraneeth/home-assistant-MyFisker/blob/main/app-info.jpeg?raw=true)
 
 # Installation and setup
 This integration can be installed through HACS.
