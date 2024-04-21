@@ -4,10 +4,12 @@
 Custom component for getting information about your Fisker Ocean presented in Home Assistant.
 
 # Features
-- Provides sensors for various part of the vehicle
+- Dashbaord - Can lock or unlock the car reliably
+
 ![Dashbord App](https://github.com/sripraneeth/home-assistant-MyFisker/blob/main/dashboard.png?raw=true)
+- Provides sensors values for various part of the vehicle
+
 ![sensors](https://github.com/sripraneeth/home-assistant-MyFisker/blob/main/sensors.png?raw=true)
-![app-info](https://github.com/sripraneeth/home-assistant-MyFisker/blob/main/app-info.jpeg?raw=true)
 
 # Installation and setup
 This integration can be installed through HACS.
