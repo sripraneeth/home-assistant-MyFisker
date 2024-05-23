@@ -176,7 +176,7 @@ class FiskerSensor(CoordinatorEntity, SensorEntity):
             value = round(self._coordinator.chargestats.batt * batt_factor, 2)
 
         if "distance" in key:
-            value = self._coordinator.chargestats.dist
+            value = round(self._coordinator.chargestats.dist * 0.62137119)
 
         if "duration" in key:
             value = self._coordinator.chargestats.time
