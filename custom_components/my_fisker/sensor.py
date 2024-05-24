@@ -410,8 +410,8 @@ SENSORS_DIGITAL_TWIN: tuple[SensorEntityDescription, ...] = (
         name="Battery max miles",
         icon="mdi:car",
         device_class=SensorDeviceClass.DISTANCE,
-        native_unit_of_measurement=UnitOfLength.MILES,  # Modified unit of measurement
-        value=lambda data, key: data[key] * 0.62137119,  # Modified value calculation
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        value=lambda data, key: data[key],
     ),
     FiskerEntityDescription(
         key="battery_percent",
@@ -450,8 +450,8 @@ SENSORS_DIGITAL_TWIN: tuple[SensorEntityDescription, ...] = (
         name="Battery total mileage odometer",
         icon="mdi:counter",
         device_class=SensorDeviceClass.DISTANCE,
-        native_unit_of_measurement=UnitOfLength.MILES,  # Modified unit of measurement
-        value=lambda data, key: data[key] * 0.62137119,  # Modified value calculation
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        value=lambda data, key: data[key],
     ),
     FiskerEntityDescription(
         key="climate_control_ambient_temperature",
