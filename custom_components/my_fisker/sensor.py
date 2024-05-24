@@ -152,7 +152,7 @@ class FiskerSensor(CoordinatorEntity, SensorEntity):
             value = round(self._coordinator.tripstats.batt * batt_factor, 2)
 
         if "distance" in key:
-            value = round(self._coordinator.tripstats.dist * 0.62137119)
+            value = self._coordinator.tripstats.dist
 
         if "duration" in key:
             value = self._coordinator.tripstats.time
@@ -691,7 +691,7 @@ SENSORS_tripSTAT: tuple[SensorEntityDescription, ...] = (
         icon="mdi:map-marker-distance",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
-        value=lambda data, key: data[key] * 0.62137119),
+        value=lambda data, key: data[key],
     ),
     FiskerEntityDescription(
         key="tripstat_duration",
@@ -742,7 +742,7 @@ SENSORS_ChargeStat: tuple[SensorEntityDescription, ...] = (
         icon="mdi:map-marker-distance",
         device_class=SensorDeviceClass.DISTANCE,
         native_unit_of_measurement=UnitOfLength.KILOMETERS,
-        value=lambda data, key: data[key] * 0.62137119),
+        value=lambda data, key: data[key],
     ),
     FiskerEntityDescription(
         key="chargestat_duration",
