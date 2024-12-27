@@ -18,6 +18,7 @@ class TripStats(object):
         self._time = 0
         self._dist = 0
         self._efficiency = 0
+        self._efficiency_dist = 0
         self._speed = 0
         self.previous_efficiency = 0
         self.Clear()
@@ -30,6 +31,7 @@ class TripStats(object):
         self._time = 0
         self._dist = 0
         self._efficiency = 0
+        self._efficiency_dist = 0
         self._speed = 0
 
     @property
@@ -50,6 +52,11 @@ class TripStats(object):
     def batt(self):
         if not self.vehicleParked:
             self._batt = self.qBatt[0].value - self.qBatt[-1].value
+        
+        # Adds an 'extra percent' due to the battery counting backwards
+        # and have probably used the existing percent also
+        if self._batt > 0:
+            return self._batt + 1
 
         return self._batt
 
@@ -66,6 +73,13 @@ class TripStats(object):
             self._efficiency = self._batt / self._dist
 
         return round(self._efficiency, 2)
+
+    @property
+    def efficiency_dist(self):
+        if self._dist != 0 and self._batt != 0:
+            self._efficiency_dist = self._dist / self._batt
+
+        return round(self._efficiency_dist, 2)
 
     @property
     def average_speed(self):
