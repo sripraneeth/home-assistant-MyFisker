@@ -127,10 +127,7 @@ class MyFiskerAPI:
             digital_twin["battery"]["total_mileage_odometer"] * 0.621371, None
         )
 
-        if digital_twin["battery"]["battery_max_miles"] > 0 :
-            digital_twin["battery"]["battery_max_miles"] = round(
-                digital_twin["battery"]["battery_max_miles"] * 0.621371, None
-            )
+      
         
         # celsius to fahrenheit
         digital_twin["battery"]["avg_cell_temp"] = round(
