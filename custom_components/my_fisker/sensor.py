@@ -413,7 +413,7 @@ SENSORS_DIGITAL_TWIN: tuple[SensorEntityDescription, ...] = (
         name="Battery max miles",
         icon="mdi:car",
         device_class=SensorDeviceClass.DISTANCE,
-        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        native_unit_of_measurement=UnitOfLength.MILES,
         value=lambda data, key: data[key],
     ),
     FiskerEntityDescription(
