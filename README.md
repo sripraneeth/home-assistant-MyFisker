@@ -22,9 +22,6 @@ This integration can be installed through HACS.
 - Alias: Prefix, which is used on all entity names created by the integration
 
 # Usage
-The integration currently only supports reading of values.
-It is possible I will add 'commands' to the vehicle in the future.
-
 For showing the vehicle on a map, this can be used:
 
 ```python
@@ -47,7 +44,7 @@ action:
 mode: single
 ```
 
-I have used apexchart for visualization.
+I have used [apexchart](https://github.com/RomRider/apexcharts-card) for visualization.
 In the screenshot above showing remaining range/battery I used the following (note the 'battery-calculation', which is because Fisker API sometimes returns zero miles):
 
 ```python
