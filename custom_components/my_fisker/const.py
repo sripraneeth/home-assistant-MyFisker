@@ -5,27 +5,34 @@ DOMAIN = "my_fisker"
 DEVICE_MANUCFACTURER = "Fisker inc."
 DEVICE_MODEL = "Fisker (Ocean)"
 
-API_TIMEOUT = 10
+API_TIMEOUT = 15
 DEFAULT_SCAN_INTERVAL = 30
 
-URL_TOKEN = "https://auth.fiskerdps.com/auth/login"
-URL_TOKEN_REFRESH = "https://auth.fiskerdps.com/auth/refresh"
-URL_WSS_EU = "wss://gw.cec-euprd.fiskerinc.com/mobile"
-URL_WSS_US = "wss://gw.cec-prd.fiskerinc.com/mobile"
+# --- New OV Loop / GoLoop cloud API (see ADR in OceanHome project) ---
+# Auth0 Resource Owner Password Grant for the access token.
+AUTH0_URL = "https://ovloop.auth0.com/oauth/token"
+AUTH0_CLIENT_ID = "0o56La53yZHn39sDjpRJEE6XOT3ZSdEM"
+AUTH0_SCOPE = "openid profile email offline_access"
+# GoLoop SDK base that serves Fisker vehicle stats + commands.
+GOLOOP_BASE_URL = "https://ccc.skipti.com/api/v1"
+URL_STATS = f"{GOLOOP_BASE_URL}/fisker/stats"
+URL_COMMAND = f"{GOLOOP_BASE_URL}/vehicle"  # POST {URL_COMMAND}/{command}
 
-HANDLER_COMMAND = "remote_command"
-COMMAND_DOORS_UNLOCK = "doors_unlock"
-COMMAND_DOORS_LOCK = "doors_lock"
-COMMAND_TRUNK_OPEN = "trunk_open"
-COMMAND_TRUNK_CLOSE = "trunk_close"
-COMMAND_CALIFORNIA_MODE = "california_mode"
+CONF_VIN = "vin"
+
+# Maps the integration's button command keys to the cloud /vehicle/{endpoint} + value.
+COMMAND_MAP = {
+    "doors_lock": ("doors", "lock"),
+    "doors_unlock": ("doors", "unlock"),
+    "trunk_open": ("trunk", "open"),
+    "trunk_close": ("trunk", "close"),
+    "california_mode": ("california_mode", None),
+}
 
 TRIM_EXTREME_ULTRA_BATT_CAPACITY = 106
 TRIM_SPORT_BATT_CAPACITY = 75
 
-CAR_SETTINGS = "car_settings"
 DIGITAL_TWIN = "digital_twin"
-PROFILES = "profiles"
 
 LIST_CLIMATE_CONTROL_SEAT_HEAT = ["Unknown", "High", "Medium", "Low", "Off"]
 LIST_CLIMATE_CONTROL_STEERING_WHEEL_HEAT = ["Unknown", "Off", "On"]

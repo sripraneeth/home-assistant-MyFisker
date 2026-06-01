@@ -11,9 +11,10 @@
         "step": {
             "user": {
                 "data": {
-                    "host": "Host",
+                    "username": "Username (OV Loop email)",
                     "password": "Password",
-                    "username": "Username"
+                    "vin": "VIN",
+                    "region": "Select your region"
                 }
             },
             "region": {

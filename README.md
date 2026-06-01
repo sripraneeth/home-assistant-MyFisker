@@ -14,12 +14,22 @@ Custom component for getting information about your Fisker Ocean presented in Ho
 # Installation and setup
 This integration can be installed through HACS.
 
+> **v0.5.0** — Updated to the current Fisker cloud API. The old `auth.fiskerdps.com`
+> login and the `cec…fiskerinc.com` WebSocket "digital twin" are deprecated and have
+> been removed. The integration now authenticates via OV Loop (Auth0) and reads vehicle
+> data from the GoLoop REST stats endpoint. Because the VIN is no longer discovered over
+> the WebSocket, you now enter it during setup.
 
 ## Setup
-- Username: The same as you use in your 'My Fisker'
-- Password: The same as you use in your 'My Fisker'
-- Region: Select your region, used to determine the datacenter URL
-- Alias: Prefix, which is used on all entity names created by the integration
+- **Username**: your **OV Loop** account email
+- **Password**: your OV Loop password
+- **VIN**: your vehicle's VIN (17 characters, e.g. `VCF1E…`) — used to query the cloud
+- **Region**: `EU` keeps metric (km/°C); `US` converts to imperial (mi/°F)
+- **Alias**: prefix used on all entity names created by the integration
+
+Battery, range, location, climate, doors/locks, windows and trip-efficiency stats are
+derived from the cloud data, same as before. Lock/unlock, trunk and California-mode
+buttons now send commands through the cloud `/vehicle/{command}` API.
 
 # Usage
 For showing the vehicle on a map, this can be used:

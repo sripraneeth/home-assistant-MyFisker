@@ -46,15 +46,7 @@ BUTTON_ENTITIES: list[EntityDescription] = [
         name="California mode OFF",
         translation_key="california_mode",
         icon="mdi:car-convertible",
-        command="cabin_temperature",
+        command="california_mode",
         command_data="off",
     ),
-    #     FiskerButtonEntityDescription(
-    #         key="cabin_temperature",
-    #         name="cabin_temperature",
-    #         translation_key="cabin_temperature",
-    #         icon="mdi:air-conditioner",
-    #         command="cabin_temperature",
-    #         command_data="18",
-    #     ),
 ]

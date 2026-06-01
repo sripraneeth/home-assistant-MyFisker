@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 import logging
-
-import pytz
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -28,7 +26,6 @@ from .const import (
     TRIM_SPORT_BATT_CAPACITY,
 )
 from .entities_sensor import (
-    SENSORS_CAR_SETTINGS,
     SENSORS_DIGITAL_TWIN,
     SENSORS_ChargeStat,
     SENSORS_tripSTAT,
@@ -103,15 +100,7 @@ class FiskerSensor(CoordinatorEntity, SensorEntity):
         self.update_chargestats()
         self.update_tripstats()
 
-        if "car_settings" in self.entity_description.key:
-            try:
-                value = self.handle_carsettings(self.entity_description.key)
-                data_available = True
-                self._attr_native_value = value
-            except:
-                _LOGGER.debug("car_settings not available")
-
-        elif "tripstat" in self.entity_description.key:
+        if "tripstat" in self.entity_description.key:
             self._attr_native_value = self.handle_tripstats(self.entity_description.key)
 
         elif "chargestat" in self.entity_description.key:
@@ -136,23 +125,6 @@ class FiskerSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_available = data_available
         self.async_write_ha_state()
-
-    def handle_carsettings(self, key):
-        value = "n/a"
-
-        carSetting = self._coordinator.my_fisker_api.GetCarSettings()
-        value = self.entity_description.get_car_settings_value(carSetting)
-
-        if "_updated" in key:
-            utc_timestamp = value["updated"]  #'2025-01-02T13:32:49.585703Z'
-            utc_time = datetime.fromisoformat(utc_timestamp.replace("Z", "+00:00"))
-            hass_tz = self._coordinator._hass.config.time_zone
-            local_time = utc_time.astimezone(pytz.timezone(hass_tz))
-            value = local_time.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            value = value["value"]
-
-        return value
 
     def handle_tripstats(self, key):
         batt_factor = self.battery_capacity / 100
@@ -386,10 +358,6 @@ async def async_setup_entry(
         else:
             entities.append(FiskerSensor(coordinator, idx, sens, my_Fisker_data))
 
-    entities.extend(
-        FiskerSensor(coordinator, 100, sensor, my_Fisker_data)
-        for sensor in SENSORS_CAR_SETTINGS
-    )
     entities.extend(
         FiskerSensor(coordinator, 200, sensor, my_Fisker_data)
         for sensor in SENSORS_tripSTAT

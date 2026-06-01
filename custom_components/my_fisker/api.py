@@ -1,6 +1,11 @@
-"""Class to handle connections towards Fisker API servers."""
+"""Class to handle connections towards the Fisker / OV Loop cloud API.
 
-import json
+Rewritten to use the current cloud API (Auth0 password grant + GoLoop REST stats),
+replacing the deprecated auth.fiskerdps.com login and the cec WebSocket "digital twin".
+The REST response is normalized into the same flattened keys the entities already use,
+so sensors / binary sensors / trip-efficiency stats keep working unchanged.
+"""
+
 import logging
 import time
 
@@ -8,407 +13,251 @@ import aiohttp
 
 from .const import (
     API_TIMEOUT,
-    CAR_SETTINGS,
+    AUTH0_CLIENT_ID,
+    AUTH0_SCOPE,
+    AUTH0_URL,
+    COMMAND_MAP,
     DIGITAL_TWIN,
-    PROFILES,
     TRIM_EXTREME_ULTRA_BATT_CAPACITY,
     TRIM_SPORT_BATT_CAPACITY,
-    URL_TOKEN,
-    URL_TOKEN_REFRESH,
-    URL_WSS_EU,
-    URL_WSS_US,
+    URL_COMMAND,
+    URL_STATS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-headers = {"User-Agent": "MOBILE 1.0.0.0"}
-
-HasAUTH = False
-HasVIN = False
-
 
 class MyFiskerAPI:
-    """Handle connection towards Fisker API servers."""
+    """Handle connection towards the Fisker / OV Loop cloud API."""
 
-    # Global variable to store the WebSocket connection
-    global_websocket = None
-
-    vin = ""
-
-    def __init__(self, username: str, password: str, region: str):
+    def __init__(self, username: str, password: str, region: str, vin: str = ""):
         _LOGGER.debug("MyFiskerAPI init")
         self._username = username
         self._password = password
         self._region = region
+        self.vin = vin
 
         self._accessToken = ""
-        self._tokenExpiration = 0
         self._refreshToken = ""
+        self._tokenExpiration = 0  # epoch seconds
         self._timeout = aiohttp.ClientTimeout(total=API_TIMEOUT)
         self.data = {}
 
+    # ------------------------------------------------------------------ auth
     async def GetAuthTokenAsync(self):
-        """Get the Authentification token from Fisker, is used towards the WebSocket connection."""
-
-        if self._accessToken != "":
-            # Get the current timestamp in seconds (Unix timestamp)
-            current_timestamp = int(time.time()) / 60
-
-            # Check if the token has expired (less than 1 hour left)
-            if current_timestamp > (self._tokenExpiration / 60) - 1437:
-                _LOGGER.warning(
-                    f"Token valid period is near end - expiration time: {self._tokenExpiration}."
-                )
-                retVal = await self.RefreshAuthTokenAsync(
-                    self._accessToken, self._refreshToken
-                )
-                self._accessToken = retVal
-                return self._accessToken
-            else:
-                _LOGGER.debug(f"Token is still valid until {self._tokenExpiration}")
-                return self._accessToken
-
-        _LOGGER.warning("Token empty or expired.")
-
-        params = {"username": self._username, "password": self._password}
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(URL_TOKEN, data=params) as response,
-        ):
-            data = await response.json()
-
-            # Check if a key exists
-            if "accessToken" in data:
-                retVal = data["accessToken"]
-                self._tokenExpiration = data["accessExpiration"]
-                self._refreshToken = data["refreshToken"]
-
-                _LOGGER.warning(
-                    f"GetAuthTokenAsync - expiration time: {self._tokenExpiration}"
-                )
-            else:
-                retVal = data["message"]
-
-            self._accessToken = retVal
+        """Return a valid Auth0 access token, refreshing/logging in as needed."""
+        now = int(time.time())
+        # Reuse the cached token until 5 minutes before expiry.
+        if self._accessToken and now < self._tokenExpiration - 300:
             return self._accessToken
 
-    async def RefreshAuthTokenAsync(self, bearerToken: str, refreshToken: str):
-        """Refresh the Authentification token from Fisker, is used towards the WebSocket connection."""
+        if self._refreshToken:
+            refreshed = await self._refresh_token()
+            if refreshed:
+                return self._accessToken
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {bearerToken}",
+        return await self._password_login()
+
+    async def _password_login(self):
+        payload = {
+            "client_id": AUTH0_CLIENT_ID,
+            "grant_type": "password",
+            "username": self._username,
+            "password": self._password,
+            "scope": AUTH0_SCOPE,
         }
-        params = {"refresh_token": refreshToken}
-
         async with (
-            aiohttp.ClientSession() as session,
-            session.post(URL_TOKEN_REFRESH, headers=headers, json=params) as response,
+            aiohttp.ClientSession(timeout=self._timeout) as session,
+            session.post(AUTH0_URL, json=payload) as response,
         ):
             data = await response.json()
-
-            # Check if the "accessToken" key exists in the response
-            if "accessToken" in data:
-                retVal = data["accessToken"]
-                self._tokenExpiration = data["accessExpiration"]
-                self._refreshToken = data["refreshToken"]
-                _LOGGER.warning(
-                    f"RefreshAuthTokenAsync - new expiration time: {self._tokenExpiration}"
-                )
-                self._accessToken = retVal
-                return self._accessToken
+            if "access_token" in data:
+                self._store_token(data)
+                _LOGGER.debug("Auth0 password login ok")
             else:
-                retVal = data["error"]
-                _LOGGER.error(f"Token refresh error:  {retVal}")
-                return ""
+                msg = data.get("error_description") or data.get("error") or "login failed"
+                _LOGGER.error("Auth0 login failed: %s", msg)
+                self._accessToken = msg
+            return self._accessToken
+
+    async def _refresh_token(self):
+        payload = {
+            "client_id": AUTH0_CLIENT_ID,
+            "grant_type": "refresh_token",
+            "refresh_token": self._refreshToken,
+        }
+        try:
+            async with (
+                aiohttp.ClientSession(timeout=self._timeout) as session,
+                session.post(AUTH0_URL, json=payload) as response,
+            ):
+                data = await response.json()
+                if "access_token" in data:
+                    self._store_token(data)
+                    _LOGGER.debug("Auth0 token refreshed")
+                    return True
+                _LOGGER.warning("Auth0 refresh failed: %s", data.get("error"))
+                return False
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.warning("Auth0 refresh error: %s", e)
+            return False
+
+    def _store_token(self, data):
+        self._accessToken = data["access_token"]
+        self._refreshToken = data.get("refresh_token", self._refreshToken)
+        self._tokenExpiration = int(time.time()) + int(data.get("expires_in", 14400))
 
     async def tokenReturn(self):
         return self._accessToken
 
-    def GetCarSettings(self):
-        try:
-            data = json.loads(self.data[CAR_SETTINGS])
-            _LOGGER.debug(data)
-            return data
-        except NameError:
-            _LOGGER.warning("Self.data['car_settings'] is not available")
-            return None
-
-    def GetExtremeTrimSettings(self):
-        try:
-            data = json.loads(self.data[TRIM_EXTREME_ULTRA_BATT_CAPACITY])
-            _LOGGER.debug(data)
-            return data
-        except NameError:
-            _LOGGER.warning("Self.data['TRIM_EXTREME_ULTRA_BATT_CAPACITY'] is not available")
-            return None
-
-
-    async def GetDigitalTwin(self):
-        self.data[DIGITAL_TWIN] = self.flatten_json(
-            self.ParseDigitalTwinResponse(
-                await self.__GetWebsocketResponse(DIGITAL_TWIN)
-            )
-        )
-        return self.data[DIGITAL_TWIN]
-
+    # --------------------------------------------------------------- profiles
     async def GetProfiles(self):
-        self.data[PROFILES] = self.ParseProfilesResponse(
-            await self.__GetWebsocketResponse(PROFILES)
-        )
-        return self.data[PROFILES]
+        """Validate access by fetching stats for the configured VIN; returns the VIN.
 
-    def ParseDigitalTwinResponse(self, jsonMsg):
-        # _LOGGER.debug('Start ParseDigitalTwinResponse()')
-        # Parse the JSON response into a Python dictionary
-        data = json.loads(jsonMsg)
-        _LOGGER.debug(data)
+        The legacy WebSocket "profiles" lookup is gone; the VIN is provided in config.
+        """
+        if not self.vin:
+            raise MyFiskerApiError("VIN is required")
+        await self.GetDigitalTwin()
+        return self.vin
 
-        if data["handler"] != DIGITAL_TWIN:
-            _LOGGER.debug("ParseDigitalTwinResponse: Wrong answer from websocket")
-            _LOGGER.debug(data)
-            return "Wrong answer from websocket"
+    # ------------------------------------------------------------------ stats
+    async def GetDigitalTwin(self):
+        """Fetch /fisker/stats and normalize to the flattened keys entities expect."""
+        token = await self.GetAuthTokenAsync()
+        headers = {"Authorization": f"Bearer {token}"}
+        async with (
+            aiohttp.ClientSession(timeout=self._timeout) as session,
+            session.get(URL_STATS, params={"vin": self.vin}, headers=headers) as response,
+        ):
+            if response.status != 200:
+                text = await response.text()
+                raise RequestError(f"stats failed: {text[:200]}", response.status)
+            body = await response.json()
 
-        # Now you can access the items in the JSON response as you would with a Python dictionary
-        digital_twin = data["data"]
-
+        data = body.get("data", body) or {}
+        normalized = self._normalize(data)
         if self._region == "US":
-            digital_twin = self._ConvertToImperial(digital_twin)
+            normalized = self._ConvertToImperial(normalized)
+        self.data[DIGITAL_TWIN] = normalized
+        return normalized
 
-        # Use the jsonpath expression to find the value in the data
-        _LOGGER.debug(digital_twin)  # Outputs: value1
-        return digital_twin
+    def _battery_capacity(self):
+        # VCF1Z=One, VCF1E=Extreme, VCF1U=Ultra (~106), VCF1S=Sport (~75)
+        prefix = (self.vin or "")[0:5].upper()
+        if prefix in ("VCF1Z", "VCF1E", "VCF1U"):
+            return TRIM_EXTREME_ULTRA_BATT_CAPACITY
+        if prefix == "VCF1S":
+            return TRIM_SPORT_BATT_CAPACITY
+        return TRIM_EXTREME_ULTRA_BATT_CAPACITY
 
-    def _ConvertToImperial(self, digital_twin):
-        # km to miles
-        digital_twin["vehicle_speed"]["speed"] = round(
-            digital_twin["vehicle_speed"]["speed"] * 0.621371, None
-        )
-        digital_twin["battery"]["max_miles"] = round(
-            digital_twin["battery"]["max_miles"] * 0.621371, None
-        )
-        digital_twin["battery"]["total_mileage_odometer"] = round(
-            digital_twin["battery"]["total_mileage_odometer"] * 0.621371, None
-        )
+    def _normalize(self, d: dict) -> dict:
+        """Map the cloud stats JSON into the legacy flattened key structure."""
 
-      
-        
-        # celsius to fahrenheit
-        digital_twin["battery"]["avg_cell_temp"] = round(
-            digital_twin["battery"]["avg_cell_temp"] * 1.8 + 32, None
-        )
-        digital_twin["climate_control"]["cabin_temperature"] = round(
-            digital_twin["climate_control"]["cabin_temperature"] * 1.8 + 32, None
-        )
-        digital_twin["climate_control"]["ambient_temperature"] = round(
-            digital_twin["climate_control"]["ambient_temperature"] * 1.8 + 32, None
-        )
-        digital_twin["climate_control"]["internal_temperature"] = round(
-            digital_twin["climate_control"]["internal_temperature"] * 1.8 + 32, None
-        )
+        def g(obj, *path, default=None):
+            cur = obj
+            for p in path:
+                if not isinstance(cur, dict):
+                    return default
+                cur = cur.get(p)
+            return cur if cur is not None else default
 
-        # m to ft
-        digital_twin["location"]["altitude"] = (
-            digital_twin["location"]["altitude"] * 3.28084
-        )
+        soc_pct = g(d, "state_of_charge", "usable", default=g(d, "battery", "percent", default=0))
+        capacity = self._battery_capacity()
 
-        return digital_twin
-
-    def GenerateVerifyRequest(self):
-        # _LOGGER.debug('Start GenerateVerifyRequest()')
-        data = {}
-        messageData = {}
-
-        # token = self.GetAuthToken(username, password)
-        token = self._accessToken
-
-        data["token"] = token
-        messageData["data"] = data
-        messageData["handler"] = "verify"
-        # print (messageData)
-        return messageData
-
-    def ParseVerifyResponse(self, jsonMsg):
-        # Parse the JSON response into a Python dictionary
-        data = json.loads(jsonMsg)
-
-        if data["handler"] != "verify":
-            return "Wrong answer from websocket"
-
-        # Now you can access the items in the JSON response as you would with a Python dictionary
-        item1 = data["data"]["authenticated"]
-
-        if item1 != "true":
-            return "Not authenticated"
-
-        result = item1
-        _LOGGER.debug(result)  # Outputs: value1
-        return True
-
-    def GenerateProfilesRequest(self):
-        # _LOGGER.debug('Start GenerateProfilesRequest()')
-        messageData = {}
-
-        messageData["handler"] = PROFILES
-        # print (messageData)
-        return messageData
-
-    def DigitalTwinRequest(self, vin):
-        # _LOGGER.debug('Start DigitalTwinRequest()')
-        data = {}
-        messageData = {}
-        data["vin"] = self.vin
-        messageData["data"] = data
-        messageData["handler"] = DIGITAL_TWIN
-        return messageData
-
-    def ParseProfilesResponse(self, jsonMsg):
-        # _LOGGER.debug('Start ParseProfilesResponse()')
-        # Parse the JSON response into a Python dictionary
-        data = json.loads(jsonMsg)
-        # print (data)
-        if data["handler"] != PROFILES:
-            _LOGGER.debug("ParseProfilesResponse: Wrong answer from websocket")
-            _LOGGER.debug(data)
-            return "Wrong answer from websocket"
-
-        # Now you can access the items in the JSON response as you would with a Python dictionary
-        item1 = data["data"][0]["vin"]
-
-        # Use the jsonpath expression to find the value in the data
-        result = item1
-        return result
-
-    async def SendCommandRequest(self, command: str, command_data: str = ""):
-        # _LOGGER.debug('Start SendCommandRequest()')
-        data = {}
-        messageData = {}
-        data["vin"] = self.vin
-        data["command"] = command
-        if data != "":
-            data["data"] = command_data
-        messageData["data"] = data
-        messageData["handler"] = "remote_command"
-        return await self.__SendWebsocketRequest(messageData)
-
-    def __GetRegionURL(self):
-        match self._region:
-            case "EU":
-                return URL_WSS_EU
-            case "US":
-                return URL_WSS_US
-            case _:
-                return URL_WSS_US
-
-    async def __GetWebsocketResponse(self, responseToReturn: str):
-        HasAUTH = False
-        HasVIN = HasAUTH
-
-        wssUrl = self.__GetRegionURL()
-
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(wssUrl, headers=headers) as ws:
-                await ws.send_str(json.dumps(self.GenerateVerifyRequest()))
-                while True:
-                    response = await ws.receive_str()
-                    handler = json.loads(response)["handler"]
-
-                    if handler == CAR_SETTINGS:
-                        self.data[CAR_SETTINGS] = response
-
-                    if handler == responseToReturn:
-                        try:
-                            await ws.close()
-                        except Exception as e:
-                            _LOGGER.debug(
-                                f"Error occurred while closing WebSocket: {e}"
-                            )
-                        return response
-
-                    if HasAUTH is not True:
-                        if handler == "verify":
-                            HasAUTH = (
-                                json.loads(response)["data"]["authenticated"] is True
-                            )
-                            # Send a message
-                            # _LOGGER.debug(f"Sending 'GenerateProfilesRequest'")
-                            await ws.send_str(
-                                json.dumps(self.GenerateProfilesRequest())
-                            )
-
-                    if HasAUTH is True and HasVIN is not True:
-                        if handler == PROFILES:
-                            self.vin = self.ParseProfilesResponse(response)
-                            # print (f"vin = {vin}")
-                            if self.vin != "":
-                                self.HasVIN = True
-                                # Send a message
-                                _LOGGER.debug(
-                                    f"Auth & VIN ok - Sending 'DigitalTwinRequest' to vin={self.vin}"
-                                )
-                                await ws.send_str(
-                                    json.dumps(self.DigitalTwinRequest(self.vin))
-                                )
-
-                    if HasAUTH is True and HasVIN is True:
-                        # _LOGGER.debug(f"Received message: {message}")
-                        if handler == responseToReturn:
-                            _LOGGER.error(response)
-                            try:
-                                await ws.close()
-                            except Exception as e:
-                                _LOGGER.error(
-                                    f"Error occurred while closing WebSocket: {e}"
-                                )
-
-                            return response
-
-    async def __SendWebsocketRequest(self, commandToSend: str):
-        HasAUTH = False
-        wssUrl = self.__GetRegionURL()
-
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(wssUrl, headers=headers) as ws:
-                await ws.send_str(json.dumps(self.GenerateVerifyRequest()))
-                while True:
-                    response = await ws.receive_str()
-                    handler = json.loads(response)["handler"]
-
-                    if handler in (DIGITAL_TWIN, CAR_SETTINGS):
-                        try:
-                            await ws.close()
-                        except Exception as e:
-                            _LOGGER.debug(
-                                f"Error occurred while closing WebSocket: {e}"
-                            )
-                        return response
-
-                    if HasAUTH is not True:
-                        if handler == "verify":
-                            HasAUTH = (
-                                json.loads(response)["data"]["authenticated"] is True
-                            )
-                            # Send a message
-                            # _LOGGER.debug(f"Sending 'GenerateProfilesRequest'")
-                            await ws.send_str(json.dumps(commandToSend))
-
-    def flatten_json(self, jsonIn):
-        out = {}
-
-        def flatten(x, name=""):
-            if type(x) is dict:
-                for a in x:
-                    flatten(x[a], name + a + "_")
-            elif type(x) is list:
-                i = 0
-                for a in x:
-                    flatten(a, name + str(i) + "_")
-                    i += 1
-            else:
-                out[name[:-1]] = x
-
-        flatten(jsonIn)
+        out = {
+            "vin": self.vin,
+            "online": g(d, "online", default=False),
+            "online_hmi": g(d, "online_hmi", default=False),
+            "updated": g(d, "updated", default=""),
+            "ip": g(d, "ip", default=""),
+            "trex_version": g(d, "trex_version", default=""),
+            # battery / range (km base — converted for US)
+            "battery_percent": g(d, "battery", "percent", default=0),
+            "battery_state_of_charge": round(soc_pct * capacity / 100, 2),
+            "battery_total_mileage_odometer": g(
+                d, "battery", "total_kilometers_odometer",
+                default=g(d, "battery", "total_mileage_odometer", default=0),
+            ),
+            "battery_max_miles": g(
+                d, "max_range", "max_range_kilometers",
+                default=g(d, "max_range", "max_miles", default=0),
+            ),
+            "battery_avg_cell_temp": g(d, "cell_temp", "avg_battery_temp", default=0),
+            "battery_charge_type": g(d, "vcu0x260", "charge_type", default="Initial_value"),
+            # climate (Celsius base)
+            "climate_control_ambient_temperature": g(d, "ambient_temperature", "temperature_celsius", default=0),
+            "climate_control_cabin_temperature": g(d, "cabin_climate", "cabin_temperature_celsius", default=0),
+            "climate_control_internal_temperature": g(d, "cabin_climate", "internal_temperature_celsius", default=0),
+            "climate_control_driver_seat_heat": g(d, "driver_seat_heat", "level", default=0),
+            "climate_control_passenger_seat_heat": g(d, "passenger_seat_heat", "level", default=0),
+            "climate_control_rear_defrost": g(d, "rear_defrost", "on", default=False),
+            "climate_control_steering_wheel_heat": g(d, "steering_wheel_heat", "on", default=False),
+            # speed / gear / readiness
+            "vehicle_speed_speed": g(d, "vehicle_speed", "speed", default=0),
+            "gear_in_park": g(d, "gear", "in_park", default=True),
+            "vehicle_ready_state_is_vehicle_ready": g(d, "vehicle_ready_state", "is_vehicle_ready", default=False),
+            # location
+            "location_latitude": g(d, "location", "latitude", default=0),
+            "location_longitude": g(d, "location", "longitude", default=0),
+            "location_altitude": g(d, "location", "altitude", default=0),
+            # locks & doors
+            "door_locks_all": g(d, "door_locks", "all", default=False),
+            "door_locks_driver": g(d, "door_locks", "driver", default=False),
+            "doors_hood": g(d, "doors", "hood", default=False),
+            "doors_trunk": g(d, "doors", "trunk", default=False),
+            "doors_left_front": g(d, "doors", "left_front", default=False),
+            "doors_left_rear": g(d, "doors", "left_rear", default=False),
+            "doors_right_front": g(d, "doors", "right_front", default=False),
+            "doors_right_rear": g(d, "doors", "right_rear", default=False),
+            # windows + sunroof
+            "windows_left_front": g(d, "windows", "left_front", default=0),
+            "windows_left_rear": g(d, "windows", "left_rear", default=0),
+            "windows_right_front": g(d, "windows", "right_front", default=0),
+            "windows_right_rear": g(d, "windows", "right_rear", default=0),
+            "windows_left_rear_quarter": g(d, "misc_windows", "left_rear_quarter", default=0),
+            "windows_right_rear_quarter": g(d, "misc_windows", "right_rear_quarter", default=0),
+            "windows_rear_windshield": g(d, "misc_windows", "rear_windshield", default=0),
+            "windows_sunroof": g(d, "sunroof", "sunroof", default=0),
+        }
         return out
+
+    def _ConvertToImperial(self, dt: dict) -> dict:
+        """Convert metric base values to imperial for the US region."""
+        mi = 0.621371
+        dt["vehicle_speed_speed"] = round((dt["vehicle_speed_speed"] or 0) * mi)
+        dt["battery_max_miles"] = round((dt["battery_max_miles"] or 0) * mi)
+        dt["battery_total_mileage_odometer"] = round(
+            (dt["battery_total_mileage_odometer"] or 0) * mi
+        )
+        for k in (
+            "battery_avg_cell_temp",
+            "climate_control_cabin_temperature",
+            "climate_control_ambient_temperature",
+            "climate_control_internal_temperature",
+        ):
+            dt[k] = round((dt[k] or 0) * 1.8 + 32)
+        dt["location_altitude"] = (dt["location_altitude"] or 0) * 3.28084
+        return dt
+
+    # --------------------------------------------------------------- commands
+    async def SendCommandRequest(self, command: str, command_data: str = ""):
+        """Send a remote command via the cloud /vehicle/{endpoint} API."""
+        if command not in COMMAND_MAP:
+            raise RequestError(f"Unknown command {command}", 400)
+        endpoint, default_value = COMMAND_MAP[command]
+        value = command_data or default_value
+        token = await self.GetAuthTokenAsync()
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        payload = {"vin": self.vin, "value": value}
+        async with (
+            aiohttp.ClientSession(timeout=self._timeout) as session,
+            session.post(f"{URL_COMMAND}/{endpoint}", json=payload, headers=headers) as response,
+        ):
+            if response.status not in (200, 201, 202):
+                text = await response.text()
+                raise RequestError(f"command {command} failed: {text[:200]}", response.status)
+            return await response.text()
 
 
 class MyFiskerApiError(Exception):
@@ -416,7 +265,7 @@ class MyFiskerApiError(Exception):
 
 
 class AuthenticationError(MyFiskerApiError):
-    """Authenatication failed"""
+    """Authentication failed"""
 
 
 class RequestError(MyFiskerApiError):
@@ -433,11 +282,3 @@ class RequestConnectionError(MyFiskerApiError):
 
 class RequestTimeoutError(MyFiskerApiError):
     """Failed to get the results from the API"""
-
-
-class RequestRetryError(MyFiskerApiError):
-    """Retries too many times"""
-
-
-class RequestDataError(MyFiskerApiError):
-    """Data is not valid"""

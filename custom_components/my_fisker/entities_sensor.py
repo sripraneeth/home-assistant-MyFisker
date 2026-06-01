@@ -256,42 +256,6 @@ SENSORS_DIGITAL_TWIN: tuple[SensorEntityDescription, ...] = (
     ),
 )
 
-SENSORS_CAR_SETTINGS: tuple[SensorEntityDescription, ...] = (
-    FiskerSensorEntityDescription(
-        key="car_settings_os_version",
-        name="OS version",
-        icon="mdi:car-info",
-        device_class=None,
-        native_unit_of_measurement=None,
-        value=lambda data, key: data[key],
-    ),
-    FiskerSensorEntityDescription(
-        key="car_settings_os_version_updated",
-        name="OS version date",
-        icon="mdi:car-info",
-        device_class=None,
-        native_unit_of_measurement=None,
-        value=lambda data, key: data[key],
-        format="%Y-%m-%d %H:%M",
-    ),
-    FiskerSensorEntityDescription(
-        key="car_settings_BODY_COLOR",
-        name="Body color",
-        icon="mdi:car-info",
-        device_class=None,
-        native_unit_of_measurement=None,
-        value=lambda data, key: data[key],
-    ),
-    FiskerSensorEntityDescription(
-        key="car_settings_DELIVERY_DESTINATION",
-        name="Delivery country",
-        icon="mdi:car-info",
-        device_class=None,
-        native_unit_of_measurement=None,
-        value=lambda data, key: data[key],
-    ),
-)
-
 SENSORS_tripSTAT: tuple[SensorEntityDescription, ...] = (
     FiskerSensorEntityDescription(
         key="tripstat_distance",

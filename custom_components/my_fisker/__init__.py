@@ -23,7 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import MyFiskerAPI
-from .const import DOMAIN, TRIM_EXTREME_ULTRA_BATT_CAPACITY, TRIM_SPORT_BATT_CAPACITY
+from .const import CONF_VIN, DOMAIN
 from .stats import TripStats
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     data = entry.data
     myFiskerApi = MyFiskerAPI(
-        data[CONF_USERNAME], data[CONF_PASSWORD], data[CONF_REGION]
+        data[CONF_USERNAME], data[CONF_PASSWORD], data[CONF_REGION], data[CONF_VIN]
     )
     await myFiskerApi.GetAuthTokenAsync()
 
@@ -207,19 +207,3 @@ class FiskerSensorEntityDescription(SensorEntityDescription):
 
     def get_digital_twin_value(self, data):
         return self.value(data, self.key)
-
-    def get_car_settings_value(self, data):
-        return self.findInArray(
-            data, self.key.replace("car_settings_", "").replace("_updated", "")
-        )
-
-    def findInArray(self, jsonArray: str, nameToSearch: str):
-        # Loop through the array
-        for item in jsonArray["data"]:
-            if item["name"] == nameToSearch:
-                value = item["value"]
-                name = item["name"]
-                return item
-                break
-        else:
-            return None

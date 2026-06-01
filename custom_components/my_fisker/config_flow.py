@@ -15,7 +15,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 # from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import MyFiskerAPI
-from .const import DOMAIN
+from .const import CONF_VIN, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Required(CONF_VIN): str,
         vol.Required(CONF_REGION): vol.In(["EU", "US", "Other"]),
     }
 )
@@ -36,19 +37,23 @@ STEP_ALIAS_DATA_SCHEMA = vol.Schema(
 async def validate_login(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect. Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user."""
 
-    api = MyFiskerAPI(data[CONF_USERNAME], data[CONF_PASSWORD], data[CONF_REGION])
+    api = MyFiskerAPI(
+        data[CONF_USERNAME], data[CONF_PASSWORD], data[CONF_REGION], data[CONF_VIN]
+    )
 
     try:
         res = await api.GetAuthTokenAsync()
-        if len(res) < 50:
+        if not res or len(res) < 50:
             raise InvalidAuth
-    except:
-        raise InvalidAuth
+    except InvalidAuth:
+        raise
+    except Exception as err:
+        raise InvalidAuth from err
 
     try:
         vin = await api.GetProfiles()
-    except:
-        raise CannotConnect
+    except Exception as err:
+        raise CannotConnect from err
 
     # Return info that you want to store in the config entry.
     return vin
